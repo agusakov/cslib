@@ -36,10 +36,6 @@ variable {α : Type} [LinearOrder α]
 
 def binaryContains (xs : List α) (a : α) : TimeM ℕ Bool := do
   if h0 : xs.isEmpty then return false
-  else if h1 : xs.length = 1 then
-    ✓ if xs.get ⟨0, by
-      simp only [h1, zero_lt_one]⟩ = a then return true
-    else return false
   else
     have h2 : 0 < xs.length := by
       simp only [List.isEmpty_iff] at h0
@@ -72,23 +68,7 @@ theorem ret_binaryContains (xs : List α) (hxs : IsSorted xs) (a : α) :
     simp only [List.isEmpty_iff] at h0
     rw [h0]
     simp only [ret_pure, not_mem_nil, decide_false]
-  | case2 xs _ h =>
-    by_cases h2 : xs.get ⟨0, by
-      simp only [h, zero_lt_one]⟩ = a
-    case pos =>
-      rw [← h2]
-      simp only [get_eq_getElem, ↓reduceIte, bind_pure_comp, ret_map, getElem_mem, decide_true]
-    case neg =>
-      simp only [ret_bind]
-      rw [ite_cond_eq_false _ _ (eq_false h2)]
-      simp only [ret_pure, false_eq_decide_iff]
-      by_contra haxs
-      apply h2
-      obtain ⟨b, hb⟩ := List.length_eq_one_iff.1 h
-      simp only [hb, mem_cons, not_mem_nil, or_false] at haxs
-      simp_all only [isEmpty_cons, Bool.false_eq_true, not_false_eq_true, get_eq_getElem,
-        getElem_cons_zero, not_true_eq_false]
-  | case3 xs _ _ h2 halfFin ih1 ih2 =>
+  | case2 xs _ h2 halfFin ih1 ih2 =>
     simp_all only [List.isEmpty_iff, ret_bind]
     have h2 := List.take_append_drop (xs.length / 2) xs
     by_cases hc : xs.get ⟨_, halfFin⟩ ≤ a
@@ -181,8 +161,7 @@ section TimeComplexity
 
 def timeBinaryContainsRec : ℕ → ℕ
 | 0 => 0
-| 1 => 1
-| n@(_+2) => timeBinaryContainsRec (n/2) + 1
+| n@(_+1) => timeBinaryContainsRec (n/2) + 1
 
 @[simp]
 theorem timeBinaryContainsRec_zero : timeBinaryContainsRec 0 = 0 := by
@@ -192,14 +171,13 @@ theorem timeBinaryContainsRec_zero : timeBinaryContainsRec 0 = 0 := by
 @[simp]
 theorem timeBinaryContainsRec_one : timeBinaryContainsRec 1 = 1 := by
   unfold timeBinaryContainsRec
-  simp only
+  simp only [Nat.succ_eq_add_one, zero_add, Nat.reduceDiv, timeBinaryContainsRec_zero]
 
 theorem timeBinaryContainsRec_ne_zero {n : ℕ} (hn : n ≠ 0) :
   timeBinaryContainsRec n ≠ 0 := by
   fun_induction timeBinaryContainsRec with
   | case1 => grind
   | case2 => grind
-  | case3 => grind
 
 @[simp]
 theorem timeBinaryContainsRec_eq_zero_iff {n : ℕ} :
@@ -207,26 +185,22 @@ theorem timeBinaryContainsRec_eq_zero_iff {n : ℕ} :
   fun_induction timeBinaryContainsRec with
   | case1 => grind
   | case2 => grind
-  | case3 => grind
 
 @[simp]
 theorem timeBinaryContainsRec_eq_one_iff {n : ℕ} :
   timeBinaryContainsRec n = 1 ↔ n = 1 := by
   fun_induction timeBinaryContainsRec with
   | case1 => grind
-  | case2 => grind
-  | case3 n ih =>
-    simp only [Nat.ofNat_pos, Nat.add_div_right, Nat.add_eq_right,
-      timeBinaryContainsRec_eq_zero_iff, Nat.add_eq_zero_iff, Nat.div_eq_zero_iff,
-      OfNat.ofNat_ne_zero, false_or, one_ne_zero, and_false, Nat.succ_eq_add_one]
+  | case2 n ih =>
+    simp only [Nat.add_eq_right, timeBinaryContainsRec_eq_zero_iff, Nat.div_eq_zero_iff,
+      OfNat.ofNat_ne_zero, false_or, Nat.succ_eq_add_one]
+    omega
 
 theorem timeBinaryContainsRec_eq_half_add_one {n : ℕ} (hn : 1 ≤ n) :
   timeBinaryContainsRec n = timeBinaryContainsRec (n / 2) + 1 := by
   fun_induction timeBinaryContainsRec with
   | case1 => grind
-  | case2 =>
-    simp only [Nat.reduceDiv, timeBinaryContainsRec_zero, zero_add]
-  | case3 n ih => grind
+  | case2 n ih => grind
 
 open Nat (clog)
 
@@ -242,53 +216,40 @@ lemma clog2_floor_half_le (n : ℕ) (h : 1 < n) : clog 2 (n / 2) ≤ clog 2 n - 
   apply Nat.clog_monotone
   grind
 
-/-- Upper bound function for merge sort time complexity: `T(n) = n * ⌈log₂ n⌉` -/
+/-- Upper bound function for binary search time complexity: `T(n) = ⌈log₂ n⌉ + 1` -/
 abbrev T (n : ℕ) : ℕ := clog 2 n + 1
 
 /-- Solve the recurrence -/
 theorem timeBinaryContainsRec_le_T (n : ℕ) : timeBinaryContainsRec n ≤ T n := by
   fun_induction timeBinaryContainsRec with
   | case1 => grind
-  | case2 => grind
-  | case3 n ih =>
-    have h2 : 1 < n + 2 := by omega
-    grw [ih]
-    simp_rw [T] at *
-    apply Nat.add_le_add_right
-    have h3 := clog2_floor_half_le _ h2
-    have h4 := add_le_add_left h3 1
-    rw [Nat.sub_add_cancel] at h4
-    · apply h4
-    apply Nat.succ_le_of_lt
-      (lt_of_lt_of_le (Nat.log_pos (one_lt_two) (@le_add_self _ _ _ _ 2 n))
-      (Nat.log_le_clog 2 (n + 2)))
-
-theorem timeBinaryContainsRec_half_le (n : ℕ) :
-  timeBinaryContainsRec (n / 2) ≤ timeBinaryContainsRec n := by
-  fun_induction timeBinaryContainsRec with
-  | case1 =>
-    simp only [Nat.zero_div, timeBinaryContainsRec_zero, Std.le_refl]
-  | case2 =>
-    simp only [Nat.reduceDiv, timeBinaryContainsRec_zero, zero_le]
-  | case3 n ih =>
-    apply le_self_add
+  | case2 n ih =>
+    induction n with
+    | zero => simp only [zero_add, Nat.reduceDiv, timeBinaryContainsRec_zero, Nat.succ_eq_add_one,
+      le_add_iff_nonneg_left, Nat.clog_one_right, Std.le_refl]
+    | succ n _ =>
+      have h2 : 1 < n + 2 := by omega
+      grw [ih]
+      simp_rw [T] at *
+      apply Nat.add_le_add_right
+      have h3 := clog2_floor_half_le _ h2
+      have h4 := add_le_add_left h3 1
+      rw [Nat.sub_add_cancel] at h4
+      · apply h4
+      apply Nat.succ_le_of_lt
+        (lt_of_lt_of_le (Nat.log_pos (one_lt_two) (@le_add_self _ _ _ _ 2 n))
+        (Nat.log_le_clog 2 (n + 2)))
 
 theorem timeBinaryContains_le_succ (n : ℕ) :
   timeBinaryContainsRec n ≤ timeBinaryContainsRec (n + 1) := by
   fun_induction timeBinaryContainsRec with
   | case1 =>
     simp only [zero_add, timeBinaryContainsRec_one, zero_le]
-  | case2 =>
-    simp only [Nat.reduceAdd]
-    by_contra h
-    simp only [not_le, Nat.lt_one_iff] at h
-    rw [timeBinaryContainsRec_eq_zero_iff] at h
-    simp only [OfNat.ofNat_ne_zero] at h
-  | case3 n ih =>
-    have h6 : 1 ≤ (n.succ.succ + 1) := by
+  | case2 n ih =>
+    have h6 : 1 ≤ (n.succ + 1) := by
       simp only [Nat.succ_eq_add_one, le_add_iff_nonneg_left, zero_le]
     rw [timeBinaryContainsRec_eq_half_add_one h6]
-    grind only [#7ba6, #d9fd]
+    grind only
 
 theorem timeBinaryContainsRec_le {a b : ℕ} (hab : a ≤ b) :
   timeBinaryContainsRec a ≤ timeBinaryContainsRec b := by
@@ -309,10 +270,7 @@ theorem binaryContains_time_le (xs : List α) (a : α) :
   fun_induction binaryContains with
   | case1 =>
     grind
-  | case2 xs h0 h1 =>
-    simp only [List.get_eq_getElem, time_bind, time_tick, h1, timeBinaryContainsRec]
-    grind only [= time_pure, #eff7]
-  | case3 xs h0 h1 h2 halfFin ih1 ih2 =>
+  | case2 xs h0 h2 halfFin ih1 ih2 =>
     simp only [time_bind, time_tick]
     by_cases hc : xs.get ⟨_, halfFin⟩ ≤ a
     case pos =>
@@ -321,7 +279,7 @@ theorem binaryContains_time_le (xs : List α) (a : α) :
       case pos =>
         simp_all only [↓reduceIte, time_pure, add_zero]
         unfold timeBinaryContainsRec
-        grind only [#8302]
+        grind only
       case neg =>
         simp only [List.get_eq_getElem]
         simp only [List.get_eq_getElem] at hc2
@@ -330,15 +288,15 @@ theorem binaryContains_time_le (xs : List α) (a : α) :
         have h5 : timeBinaryContainsRec (xs.length - (xs.length / 2 + 1)) ≤
           timeBinaryContainsRec (xs.length / 2) := by
           apply timeBinaryContainsRec_le
-          grind
+          grind only
         rw [timeBinaryContainsRec_eq_half_add_one (by omega)]
-        grind
+        grind only
     case neg =>
       rw [timeBinaryContainsRec_eq_half_add_one (by omega)]
       simp only [ite_cond_eq_false _ _ (eq_false hc)]
       simp_all only [List.isEmpty_iff, List.length_drop, List.length_take, List.get_eq_getElem,
         not_le]
-      grind
+      grind only [= min_def]
 
 /-- Time complexity of binaryContains -/
 theorem binaryContains_time (xs : List α) (a : α) :
