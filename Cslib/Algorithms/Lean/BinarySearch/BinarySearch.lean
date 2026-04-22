@@ -23,8 +23,8 @@ is the number of comparisons.
 --
 ## Main results
 
-- `mergeSort_correct`: `mergeSort` permutes the list into a sorted one.
-- `mergeSort_time`:  The number of comparisons of `mergeSort` is at most `n*⌈log₂ n⌉`.
+- `ret_binaryContains`: `binaryContains` returns the same result as List.contains
+- `binaryContains_time`:  The number of comparisons of `binaryContains` is at most `⌈log₂ n⌉`.
 
 -/
 
